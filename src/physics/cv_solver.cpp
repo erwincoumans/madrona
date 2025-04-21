@@ -151,7 +151,8 @@ float GaussMinimizationNode::objWarp(
     float *dc = sd->getContactR(nullptr);
     float *de = sd->getEqualityR(nullptr);
 
-    // Calculate s(...) now:
+    // Calculate s(Jx - a_ref) now:
+    // Contact constraints
     warpLoopSync(sd->nc / 3, [&](uint32_t iter) {
         float curr_val = 0.f;
         if (iter != 0xFFFF'FFFF) {
@@ -179,6 +180,7 @@ float GaussMinimizationNode::objWarp(
         res += warpReduceSum(curr_val);
     });
 
+    // Limit constraints
     warpLoopSync(sd->nl, [&](uint32_t iter) {
         float curr_val = 0.f;
         if (iter != 0xFFFF'FFFF) {
