@@ -2208,9 +2208,6 @@ void implicitDamping(Context &ctx,
                      BodyGroupMemory &mem)
 {
     CV_PROF_START(t0, damp);
-
-    BodyInertial *body_inertials = mem.inertials(prop);
-    int32_t *dof_to_body = mem.dofToBody(prop);
     uint32_t total_dofs = prop.qvDim;
     float *damping = mem.damping(prop);
 
