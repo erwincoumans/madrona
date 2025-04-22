@@ -26,6 +26,7 @@ DEFINE_STAGE_VARS(contAccRef);
 DEFINE_STAGE_VARS(eqAccRef);
 DEFINE_STAGE_VARS(cg);
 DEFINE_STAGE_VARS(lineSearch);
+DEFINE_STAGE_VARS(test);
 }
 #endif
 
@@ -58,8 +59,10 @@ inline void reportPhysicsClocks(Context &ctx,
     #define CV_REPORT_AVG_CLOCK(name) double cv##name##_pctg = (double)(cv##name##_avg) / (double)total_clocks; \
         cv##name##_min = std::min(cv##name##_pctg, cv##name##_min); \
         cv##name##_max = std::max(cv##name##_pctg, cv##name##_max); \
-        printf("createStageData(avg=%lf, min=%lf, max=%lf)\n", cv##name##_pctg, cv##name##_min, cv##name##_max); \
-        cv##name .store< sync::relaxed >(0);
+        printf(#name " %llu clocks; createStageData(avg=%lf, min=%lf, max=%lf)\n",  \
+                (int64_t)(cv##name .load<sync::relaxed>()), \
+                cv##name##_pctg, cv##name##_min, cv##name##_max); \
+                cv##name .store< sync::relaxed >(0);
 
 
 
@@ -91,6 +94,7 @@ inline void reportPhysicsClocks(Context &ctx,
         CV_RUNNING_AVG(eqAccRef);
         CV_RUNNING_AVG(cg);
         CV_RUNNING_AVG(lineSearch);
+        CV_RUNNING_AVG(test);
 
         CV_REPORT_AVG_CLOCK(com);
         CV_REPORT_AVG_CLOCK(inertias);
@@ -113,6 +117,7 @@ inline void reportPhysicsClocks(Context &ctx,
         CV_REPORT_AVG_CLOCK(eqAccRef);
         CV_REPORT_AVG_CLOCK(cg);
         CV_REPORT_AVG_CLOCK(lineSearch);
+        CV_REPORT_AVG_CLOCK(test);
     }
 }
 #endif

@@ -462,11 +462,11 @@ void GaussMinimizationNode::testNodeMul(int32_t invocation_idx)
         uint32_t b_mat_rows, b_mat_cols;
 
         if (lane_id == 0) {
-            a_mat_rows = 12;
-            a_mat_cols = 16;
+            a_mat_rows = 120;
+            a_mat_cols = 160;
 
-            b_mat_rows = 16;
-            b_mat_cols = 18;
+            b_mat_rows = 160;
+            b_mat_cols = 1;
 
             test_a_mat = (float *)mwGPU::TmpAllocator::get().alloc(
                 sizeof(float) * a_mat_rows * a_mat_cols);
@@ -498,16 +498,22 @@ void GaussMinimizationNode::testNodeMul(int32_t invocation_idx)
         b_mat_rows = __shfl_sync(0xFFFF'FFFF, b_mat_rows, 0);
         b_mat_cols = __shfl_sync(0xFFFF'FFFF, b_mat_cols, 0);
 
-        gmmaWarpSmallReg<float, 4, false, false, true>(
-                test_res_mat,
-                test_a_mat,
-                test_b_mat,
-                a_mat_rows,
-                a_mat_cols,
-                b_mat_rows,
-                b_mat_cols);
+        {
+            CV_PROF_START(t0, test);
+            gmmaWarpSmallReg<float, 4, false, false, true>(
+                    test_res_mat,
+                    test_a_mat,
+                    test_b_mat,
+                    a_mat_rows,
+                    a_mat_cols,
+                    b_mat_rows,
+                    b_mat_cols);
+            __syncwarp();
+        }
 
         if (lane_id == 0) {
+            printf("Finished matmul\n");
+#if 0
             for (int i = 0; i < a_mat_rows; ++i) {
                 for (int j = 0; j < b_mat_cols; ++j) {
                     float v = test_res_mat[i * b_mat_cols + j];
@@ -518,6 +524,7 @@ void GaussMinimizationNode::testNodeMul(int32_t invocation_idx)
                 printf("\n");
             }
             printf("\n");
+#endif
         }
     }
 }
@@ -1130,6 +1137,9 @@ void GaussMinimizationNode::allocateScratch(int32_t invocation_idx)
     MADRONA_GPU_SINGLE_THREAD {
         const int32_t num_smem_bytes_per_warp =
             mwGPU::SharedMemStorage::numBytesPerWarp();
+
+        printf("num_smem_bytes_per_warp = %d; num_floats_per_warp = %d\n",
+                (int)num_smem_bytes_per_warp, (int)(num_smem_bytes_per_warp / sizeof(float)));
 
         // We want to fit as much data as possible into shared memory
         uint32_t world_id = invocation_idx;
@@ -2227,6 +2237,7 @@ TaskGraph::NodeID GaussMinimizationNode::addToGraph(
 
     uint32_t num_invocations = mwGPU::GPUImplConsts::get().numWorlds;
 
+
     TaskGraph::NodeID cur_node = builder.addNodeFn<
         &GaussMinimizationNode::allocateScratch>(data_id, {deps},
                 Optional<TaskGraph::NodeID>::none(),
@@ -2254,6 +2265,12 @@ TaskGraph::NodeID GaussMinimizationNode::addToGraph(
 
     cur_node = builder.addNodeFn<
         &GaussMinimizationNode::nonlinearCG>(data_id, {cur_node},
+                Optional<TaskGraph::NodeID>::none(),
+                num_invocations,
+                32);
+
+    cur_node = builder.addNodeFn<
+        &GaussMinimizationNode::testNodeMul>(data_id, {cur_node},
                 Optional<TaskGraph::NodeID>::none(),
                 num_invocations,
                 32);

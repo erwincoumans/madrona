@@ -262,6 +262,49 @@ void copyToRegs(
 template <typename DataT,
           uint32_t block_size,
           bool transposed>
+void copyVectorToRegs(
+        DataT (&blk_tmp)[block_size],
+        DataT *vec,
+        uint32_t dim,
+        uint32_t blk)
+{
+    uint32_t start = blk * block_size;
+
+    #pragma unroll
+    for (uint32_t blk_i = 0; blk_i < block_size; ++blk_i) {
+        blk_tmp[blk_i] = (start + blk_i < dim) ?
+            vec[start + blk_i] : 0.f;
+    }
+
+#if 0
+    uint32_t col_start = blk_c * block_size;
+    uint32_t row_start = blk_r * block_size;
+
+    #pragma unroll
+    for (uint32_t blk_row = 0; blk_row < block_size; ++blk_row) {
+        #pragma unroll
+        for (uint32_t blk_col = 0; blk_col < block_size; ++blk_col) {
+            if constexpr (transposed) {
+                blk_tmp[blk_row][blk_col] = 
+                    (col_start + blk_col < mtx_cols &&
+                     row_start + blk_row < mtx_rows) ?
+                    mtx[row_start + blk_row + mtx_rows * (col_start + blk_col)] :
+                    0.f;
+            } else {
+                blk_tmp[blk_row][blk_col] = 
+                    (col_start + blk_col < mtx_cols &&
+                     row_start + blk_row < mtx_rows) ?
+                    mtx[col_start + blk_col + mtx_cols * (row_start + blk_row)] :
+                    0.f;
+            }
+        }
+    }
+#endif
+}
+
+template <typename DataT,
+          uint32_t block_size,
+          bool transposed>
 void copyToRegsWithBoundary(
         DataT (&blk_tmp)[block_size][block_size], // dst
         DataT *mtx,                               // src
@@ -386,6 +429,17 @@ void setBlockZero(
 
 template <typename DataT,
           uint32_t block_size>
+void setVecZero(
+        DataT (&blk)[block_size])
+{
+    #pragma unroll
+    for (int i = 0; i < block_size; i++) {
+        blk[i][j] = 0.f;
+    }
+}
+
+template <typename DataT,
+          uint32_t block_size>
 void gmmaWarpSmallSmem(
         DataT *res,
         DataT *a,
@@ -453,6 +507,80 @@ void gmmaWarpSmallReg(
             copyToRegs<DataT, block_size, false>(
                     res_blk_tmp, res, res_rows, res_cols,
                     res_blk_r, res_blk_c);
+        }
+
+        for (uint32_t blk_j = 0; blk_j < num_blks_b; ++blk_j) {
+            copyToRegs<DataT, block_size, a_transposed>(
+                    a_blk_tmp, a, a_rows, a_cols, res_blk_r, blk_j);
+            copyToRegs<DataT, block_size, b_transposed>(
+                    b_blk_tmp, b, b_rows, b_cols, blk_j, res_blk_c);
+
+            gmmaBlockRegs(res_blk_tmp, a_blk_tmp, b_blk_tmp);
+        }
+
+        copyToMem(res, res_blk_tmp, res_rows, 
+                  res_cols, res_blk_r, res_blk_c);
+
+        cur_iter += 32;
+    }
+}
+
+// Assume entire vector result can be stored in registers
+template <typename DataT,
+          uint32_t block_size,
+          bool a_transposed,
+          bool b_transposed,
+          bool reset_res>
+void mvaWarpSmallReg(
+        DataT *res, // Vector
+        DataT *m,   // Matrix
+        DataT *v,   // Vector
+        uint32_t a_rows, uint32_t a_cols)
+{
+    // Slice size is warp size
+    constexpr int32_t kNumValsPerThread = 16;
+
+    int32_t lane_id = threadIdx.x % 32;
+
+    DataT a_blk_tmp[block_size][block_size];
+    DataT b_blk_tmp[block_size];
+
+    DataT res_blk_tmp[block_size];
+
+    uint32_t res_rows = a_rows;
+    uint32_t res_cols = 1; // We don't need this variable
+
+    int32_t num_vals_in_smem = mwGPU::SharedMemStorage::numBytesPerWarp() /
+                               sizeof(DataT);
+    DataT *smem_bank = (DataT *)mwGPU::SharedMemStorage::buffer;
+
+    // Load vector into shared memory
+    warpLoop(a_cols,
+             [&](uint32_t iter) {
+                 smem_bank[iter] = v[iter];
+             });
+
+    __syncwarp();
+
+    uint32_t num_iters_r = (res_rows + block_size - 1) / block_size;
+    uint32_t num_iters_c = 1;
+    uint32_t total_num_iters = num_iters_r * num_iters_c;
+
+    uint32_t num_blks_b = (a_cols + block_size - 1) / block_size;
+
+    uint32_t lane_id = threadIdx.x % 32;
+    uint32_t cur_iter = lane_id;
+    
+    while (cur_iter < total_num_iters) {
+        uint32_t res_blk_r = cur_iter / num_iters_c;
+        uint32_t res_blk_c = cur_iter % num_iters_c;
+
+        if constexpr (reset_res) {
+            setVecZero(res_blk_tmp);
+        } else {
+            copyVectorToRegs<DataT, block_size, false>(
+                    res_blk_tmp, res, res_rows,
+                    res_blk_r);
         }
 
         for (uint32_t blk_j = 0; blk_j < num_blks_b; ++blk_j) {

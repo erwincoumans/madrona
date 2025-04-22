@@ -4,7 +4,7 @@
 #include <madrona/physics.hpp>
 
 #ifdef MADRONA_GPU_MODE
-// #define CV_COUNT_GPU_CLOCKS
+#define CV_COUNT_GPU_CLOCKS
 #endif
 
 
@@ -41,6 +41,7 @@ DECLARE_STAGE_VARS(contAccRef);
 DECLARE_STAGE_VARS(eqAccRef);
 DECLARE_STAGE_VARS(cg);
 DECLARE_STAGE_VARS(lineSearch);
+DECLARE_STAGE_VARS(test);
 }
 
 class CVClockHelper {
