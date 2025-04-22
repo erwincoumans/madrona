@@ -179,6 +179,8 @@ struct CVSolveData {
     uint32_t accRefAllocatedBytes;
     uint32_t prepAllocatedBytes;
 
+    float *testBuffer;
+
     static constexpr uint32_t kNumRegisters = 9;
 
     struct RegInfo {

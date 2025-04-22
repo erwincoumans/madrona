@@ -260,8 +260,7 @@ void copyToRegs(
 }
 
 template <typename DataT,
-          uint32_t block_size,
-          bool transposed>
+          uint32_t block_size>
 void copyVectorToRegs(
         DataT (&blk_tmp)[block_size],
         DataT *vec,
@@ -275,31 +274,24 @@ void copyVectorToRegs(
         blk_tmp[blk_i] = (start + blk_i < dim) ?
             vec[start + blk_i] : 0.f;
     }
+}
 
-#if 0
-    uint32_t col_start = blk_c * block_size;
-    uint32_t row_start = blk_r * block_size;
+template <typename DataT,
+          uint32_t block_size>
+void copyVectorToMem(
+        DataT (&blk_tmp)[block_size],
+        DataT *vec,
+        uint32_t dim,
+        uint32_t blk)
+{
+    uint32_t row_start = blk * block_size;
 
     #pragma unroll
     for (uint32_t blk_row = 0; blk_row < block_size; ++blk_row) {
-        #pragma unroll
-        for (uint32_t blk_col = 0; blk_col < block_size; ++blk_col) {
-            if constexpr (transposed) {
-                blk_tmp[blk_row][blk_col] = 
-                    (col_start + blk_col < mtx_cols &&
-                     row_start + blk_row < mtx_rows) ?
-                    mtx[row_start + blk_row + mtx_rows * (col_start + blk_col)] :
-                    0.f;
-            } else {
-                blk_tmp[blk_row][blk_col] = 
-                    (col_start + blk_col < mtx_cols &&
-                     row_start + blk_row < mtx_rows) ?
-                    mtx[col_start + blk_col + mtx_cols * (row_start + blk_row)] :
-                    0.f;
-            }
+        if (row_start + blk_row < dim) {
+            vec[row_start + blk_row] = blk_tmp[blk_row];
         }
     }
-#endif
 }
 
 template <typename DataT,
@@ -414,6 +406,22 @@ void gmmaBlockRegs(
 }
 
 template <typename DataT,
+          uint32_t block_size,
+          bool reset_res>
+void mvaBlockRegs(DataT (&res)[block_size],
+                  DataT (&a)[block_size][block_size],
+                  DataT (&b)[block_size])
+{
+    #pragma unroll
+    for (int i = 0; i < block_size; ++i) {
+        #pragma unroll
+        for (int j = 0; j < block_size; ++j) {
+            res[i] += a[i][j] * b[j];
+        }
+    }
+}
+
+template <typename DataT,
           uint32_t block_size>
 void setBlockZero(
         DataT (&blk)[block_size][block_size])
@@ -434,7 +442,7 @@ void setVecZero(
 {
     #pragma unroll
     for (int i = 0; i < block_size; i++) {
-        blk[i][j] = 0.f;
+        blk[i] = 0.f;
     }
 }
 
@@ -472,7 +480,8 @@ template <typename DataT,
           uint32_t block_size,
           bool a_transposed,
           bool b_transposed,
-          bool reset_res>
+          bool reset_res,
+          bool dbg>
 void gmmaWarpSmallReg(
         DataT *res,
         DataT *a,
@@ -529,17 +538,13 @@ void gmmaWarpSmallReg(
 template <typename DataT,
           uint32_t block_size,
           bool a_transposed,
-          bool b_transposed,
           bool reset_res>
-void mvaWarpSmallReg(
+void mvaWarpSmallRegImpl(
         DataT *res, // Vector
-        DataT *m,   // Matrix
-        DataT *v,   // Vector
+        DataT *a,   // Matrix
+        DataT *b,   // Vector
         uint32_t a_rows, uint32_t a_cols)
 {
-    // Slice size is warp size
-    constexpr int32_t kNumValsPerThread = 16;
-
     int32_t lane_id = threadIdx.x % 32;
 
     DataT a_blk_tmp[block_size][block_size];
@@ -554,13 +559,17 @@ void mvaWarpSmallReg(
                                sizeof(DataT);
     DataT *smem_bank = (DataT *)mwGPU::SharedMemStorage::buffer;
 
+    assert(num_vals_in_smem >= a_cols);
+
     // Load vector into shared memory
+#if 0
     warpLoop(a_cols,
              [&](uint32_t iter) {
-                 smem_bank[iter] = v[iter];
+                 smem_bank[iter] = b[iter];
              });
 
     __syncwarp();
+#endif
 
     uint32_t num_iters_r = (res_rows + block_size - 1) / block_size;
     uint32_t num_iters_c = 1;
@@ -568,7 +577,6 @@ void mvaWarpSmallReg(
 
     uint32_t num_blks_b = (a_cols + block_size - 1) / block_size;
 
-    uint32_t lane_id = threadIdx.x % 32;
     uint32_t cur_iter = lane_id;
     
     while (cur_iter < total_num_iters) {
@@ -578,7 +586,7 @@ void mvaWarpSmallReg(
         if constexpr (reset_res) {
             setVecZero(res_blk_tmp);
         } else {
-            copyVectorToRegs<DataT, block_size, false>(
+            copyVectorToRegs<DataT, block_size>(
                     res_blk_tmp, res, res_rows,
                     res_blk_r);
         }
@@ -586,16 +594,50 @@ void mvaWarpSmallReg(
         for (uint32_t blk_j = 0; blk_j < num_blks_b; ++blk_j) {
             copyToRegs<DataT, block_size, a_transposed>(
                     a_blk_tmp, a, a_rows, a_cols, res_blk_r, blk_j);
-            copyToRegs<DataT, block_size, b_transposed>(
-                    b_blk_tmp, b, b_rows, b_cols, blk_j, res_blk_c);
+            copyVectorToRegs<DataT, block_size>(
+                    b_blk_tmp, /*smem_bank*/b, a_cols, blk_j);
 
-            gmmaBlockRegs(res_blk_tmp, a_blk_tmp, b_blk_tmp);
+            mvaBlockRegs<DataT, block_size, reset_res>(
+                    res_blk_tmp, a_blk_tmp, b_blk_tmp);
         }
 
-        copyToMem(res, res_blk_tmp, res_rows, 
-                  res_cols, res_blk_r, res_blk_c);
+        copyVectorToMem<DataT, block_size>(
+                res_blk_tmp, res, res_rows, res_blk_r);
 
         cur_iter += 32;
+    }
+}
+
+template <typename DataT,
+          bool a_transposed,
+          bool reset_res>
+void mvaWarpSmallReg(
+        DataT *res,
+        DataT *m,
+        DataT *v,
+        uint32_t a_rows, uint32_t a_cols,
+        float *cmp)
+{
+    uint32_t vec_dim = a_cols;
+
+    uint32_t num_vals_per_thread = (a_rows + 31) / 32;
+
+    if (num_vals_per_thread == 1) {
+        __syncwarp();
+        mvaWarpSmallRegImpl<DataT, 1, a_transposed, reset_res>(
+                res, m, v, a_rows, a_cols);
+    } else if (num_vals_per_thread == 2) {
+        __syncwarp();
+        mvaWarpSmallRegImpl<DataT, 2, a_transposed, reset_res>(
+                res, m, v, a_rows, a_cols);
+    } else if (num_vals_per_thread == 3) {
+        __syncwarp();
+        mvaWarpSmallRegImpl<DataT, 3, a_transposed, reset_res>(
+                res, m, v, a_rows, a_cols);
+    } else {
+        __syncwarp();
+        mvaWarpSmallRegImpl<DataT, 4, a_transposed, reset_res>(
+                res, m, v, a_rows, a_cols);
     }
 }
 

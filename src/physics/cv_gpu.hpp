@@ -127,7 +127,8 @@ template <typename DataT,
           uint32_t block_size,
           bool a_transposed,
           bool b_transposed,
-          bool reset_res>
+          bool reset_res,
+          bool dbg = false>
 void gmmaWarpSmallReg(
         DataT *res,
         DataT *a,
