@@ -412,7 +412,11 @@ static void parsePoseInternal(
         const char* rpy_str = xml->Attribute("rpy");
         if (rpy_str != NULL) {
             if (assert_no_rpy) {
-                assert(strcmp(rpy_str, "0 0 0") == 0);
+                auto values = getFloats(rpy_str);
+                massert(values.size() == 3, "URDF Loading: RPY doesn't have 3 floats");
+                for (int i = 0; i < 3; ++i) {
+                    massert(values[i] == 0.f, "URDF Loading: RPY should be 0");
+                }
             }
             pose.rotation = getQuatFromRPY(rpy_str);
         }
