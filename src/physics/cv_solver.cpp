@@ -2304,7 +2304,7 @@ void solveCPU(Context &ctx,
     uint32_t nl = cv_sing.nl;
     uint32_t nf = cv_sing.nf;
     uint32_t nv = cv_sing.nv;
-    uint32_t num_constraints = nc + nl;
+    uint32_t num_constraints = nc + nl + nf;
 
     // No constraints, done
     if (num_constraints == 0) { copyResult(ctx, cv_sing.freeAcc); }
@@ -2354,7 +2354,7 @@ void solveCPU(Context &ctx,
 
     adjustContactRegularization(R_c, cv_sing.mu, cv_sing.muDim);
 
-    // Constraint mass
+    // Replace R (inv constraint mass) with constraint mass
     for (uint32_t i = 0; i < nc; i++) {
         R_c[i] = 1 / R_c[i];
     }
