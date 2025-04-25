@@ -374,6 +374,7 @@ void registerTypes(ECSRegistry &registry,
     registry.registerComponent<RigidBodyStatic>();
 
     registry.registerSingleton<broadphase::BVH>();
+    registry.registerSingleton<PhysicsDebugData>();
 
     registry.registerComponent<CollisionEvent>();
     registry.registerArchetype<CollisionEventTemporary>();

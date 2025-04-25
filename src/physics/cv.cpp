@@ -35,7 +35,7 @@ namespace madrona::phys::cv {
 namespace tasks {
 #ifdef CV_COUNT_GPU_CLOCKS
 inline void reportPhysicsClocks(Context &ctx,
-                                PhysicsSystemState &state)
+                                PhysicsDebugData &dbg_data)
 {
     uint64_t total_clocks = 0;
     uint64_t count = 0;
@@ -64,11 +64,13 @@ inline void reportPhysicsClocks(Context &ctx,
                 cv##name##_pctg, cv##name##_min, cv##name##_max); \
                 cv##name .store< sync::relaxed >(0);
 
-
-
     if (ctx.worldID().idx != 0) {
         return;
     }
+
+    #define CV_SAVE_REPORT(name) dbg_data. name . clocks = cv##name##_avg; \
+                                 dbg_data. name . valMin = cv##name##_min; \
+                                 dbg_data. name . valMax = cv##name##_max;
 
     if (threadIdx.x == 0 && ctx.worldID().idx == 0) {
         printf("Reporting physics clocks:\n");
@@ -116,6 +118,28 @@ inline void reportPhysicsClocks(Context &ctx,
         CV_REPORT_AVG_CLOCK(eqAccRef);
         CV_REPORT_AVG_CLOCK(cg);
         CV_REPORT_AVG_CLOCK(lineSearch);
+
+        CV_SAVE_REPORT(com);
+        CV_SAVE_REPORT(inertias);
+        CV_SAVE_REPORT(rne);
+        CV_SAVE_REPORT(crb);
+        CV_SAVE_REPORT(invMass);
+        CV_SAVE_REPORT(processContacts);
+        CV_SAVE_REPORT(convert);
+        CV_SAVE_REPORT(destroy);
+        CV_SAVE_REPORT(init);
+        CV_SAVE_REPORT(damp);
+        CV_SAVE_REPORT(intg);
+        CV_SAVE_REPORT(fk);
+        CV_SAVE_REPORT(narrowphase);
+        CV_SAVE_REPORT(broadphase1);
+        CV_SAVE_REPORT(broadphase2);
+        CV_SAVE_REPORT(allocScratch);
+        CV_SAVE_REPORT(prepSolver);
+        CV_SAVE_REPORT(contAccRef);
+        CV_SAVE_REPORT(eqAccRef);
+        CV_SAVE_REPORT(cg);
+        CV_SAVE_REPORT(lineSearch);
     }
 }
 #endif
@@ -196,7 +220,7 @@ TaskGraphNodeID setupCVSolverTasks(TaskGraphBuilder &builder,
 #ifdef CV_COUNT_GPU_CLOCKS
     cur_node = builder.addToGraph<ParallelForNode<Context,
              tasks::reportPhysicsClocks,
-                PhysicsSystemState>>({cur_node});
+                PhysicsDebugData>>({cur_node});
 #endif
 
     return cur_node;

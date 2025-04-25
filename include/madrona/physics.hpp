@@ -60,6 +60,36 @@ struct CVXSolve {
 };
 #endif
 
+struct PhysicsDebugData {
+    struct StageInfo {
+        int64_t clocks;
+        double valMin;
+        double valMax;
+    };
+
+    StageInfo com;
+    StageInfo inertias;
+    StageInfo rne;
+    StageInfo crb;
+    StageInfo invMass;
+    StageInfo processContacts;
+    StageInfo convert;
+    StageInfo destroy;
+    StageInfo init;
+    StageInfo damp;
+    StageInfo intg;
+    StageInfo fk;
+    StageInfo narrowphase;
+    StageInfo broadphase1;
+    StageInfo broadphase2;
+    StageInfo allocScratch;
+    StageInfo prepSolver;
+    StageInfo contAccRef;
+    StageInfo eqAccRef;
+    StageInfo cg;
+    StageInfo lineSearch;
+};
+
 struct ExternalForce : math::Vector3 {
     ExternalForce(math::Vector3 v)
         : Vector3(v)
