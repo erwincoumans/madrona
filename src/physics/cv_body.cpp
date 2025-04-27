@@ -7,7 +7,7 @@ namespace madrona::phys::cv {
 
 using namespace math;
 using namespace base;
-    
+
 Entity makeBodyGroup(Context &ctx,
                      uint32_t num_bodies,
                      float global_scale)
@@ -280,7 +280,7 @@ Entity makeBody(Context &ctx, Entity body_grp, BodyDesc desc)
 
     if (p.tmp.bodyCounter == p.numBodies) {
         initBodyGroupMemory(
-            ctx, 
+            ctx,
             ctx.get<BodyGroupProperties>(body_grp),
             ctx.get<BodyGroupMemory>(body_grp));
     }
@@ -426,7 +426,7 @@ void disableJointCollisions(
 {
     BodyGroupMemory m = ctx.get<BodyGroupMemory>(grp);
     BodyGroupProperties p = ctx.get<BodyGroupProperties>(grp);
-    
+
     DofObjectProxies a_proxies = ctx.get<DofObjectProxies>(joint_a);
     DofObjectProxies b_proxies = ctx.get<DofObjectProxies>(joint_b);
 
@@ -474,7 +474,7 @@ static inline void joinBodiesGeneral(
         .damping = damping,
         .frictionLoss = friction_loss,
     };
-    
+
     // You need to disable all the colliders between these two
     disableJointCollisions(
             ctx,
@@ -490,7 +490,7 @@ void joinBodies(
         Entity child_physics_entity,
         JointHinge hinge_info)
 {
-    joinBodiesGeneral(ctx, 
+    joinBodiesGeneral(ctx,
                       body_grp,
                       parent_physics_entity,
                       child_physics_entity,
@@ -509,7 +509,7 @@ void joinBodies(
         Entity child_physics_entity,
         JointBall ball_info)
 {
-    joinBodiesGeneral(ctx, 
+    joinBodiesGeneral(ctx,
                       body_grp,
                       parent_physics_entity,
                       child_physics_entity,
@@ -525,7 +525,7 @@ void joinBodies(
         Entity child_physics_entity,
         JointSlider slider_info)
 {
-    joinBodiesGeneral(ctx, 
+    joinBodiesGeneral(ctx,
                       body_grp,
                       parent_physics_entity,
                       child_physics_entity,
@@ -542,7 +542,7 @@ void joinBodies(
         Entity child_physics_entity,
         JointFixed fixed_info)
 {
-    joinBodiesGeneral(ctx, 
+    joinBodiesGeneral(ctx,
                       body_grp,
                       parent_physics_entity,
                       child_physics_entity,
@@ -621,7 +621,7 @@ void addHingeExternalForce(
         Context &ctx, Entity hinge_joint, float newtons)
 {
     DofObjectGroup joint_info = ctx.get<DofObjectGroup>(hinge_joint);
-    
+
     BodyGroupMemory m = ctx.get<BodyGroupMemory>(joint_info.bodyGroup);
     BodyGroupProperties p = ctx.get<BodyGroupProperties>(joint_info.bodyGroup);
 
@@ -795,6 +795,14 @@ BodyHierarchy & getBodyHierarchy(Context &ctx, Entity body_grp, StringID string_
     BodyGroupMemory &m = ctx.get<BodyGroupMemory>(body_grp);
     BodyGroupProperties &p = ctx.get<BodyGroupProperties>(body_grp);
     return m.hierarchies(p)[getBodyIndex(m, p, string_id)];
+}
+
+void performForwardKinematics(Context &ctx, Entity body_grp)
+{
+    BodyGroupMemory &m = ctx.get<BodyGroupMemory>(body_grp);
+    BodyGroupProperties &p = ctx.get<BodyGroupProperties>(body_grp);
+    tasks::forwardKinematics(ctx, m, p);
+    tasks::computeGroupCOM(ctx, p, m);
 }
 
 uint32_t getNumCheckpointBytes(Context &ctx, Entity body_grp)

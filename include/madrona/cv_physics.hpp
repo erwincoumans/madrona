@@ -634,6 +634,9 @@ BodyInertial & getBodyInertial(Context &ctx, Entity body_grp, StringID string_id
 BodyHierarchy & getBodyHierarchy(Context &ctx, Entity body_grp, uint32_t body_idx);
 BodyHierarchy & getBodyHierarchy(Context &ctx, Entity body_grp, StringID string_id);
 
+// Request forward kinematics to be performed
+void performForwardKinematics(Context &ctx, Entity body_grp);
+
 // Checkpointing
 uint32_t getNumCheckpointBytes(Context &ctx, Entity body_grp);
 
